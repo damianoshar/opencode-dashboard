@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenCode Dashboard</title>
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>◧</text></svg>">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">◧</span>
+    <div>
+      <h1>OpenCode Dashboard</h1>
+      <p id="db-path" class="muted">loading…</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <span id="health-pill" class="pill pill-muted">connecting</span>
+    <button id="refresh-btn" class="btn btn-ghost" title="Reload the current view">⟳ Refresh</button>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab active" data-view="overview">Overview</button>
+  <button class="tab" data-view="sessions">Sessions</button>
+  <button class="tab" data-view="projects">Projects</button>
+  <button class="tab" data-view="directories">Directories</button>
+  <button class="tab" data-view="backups">Backups</button>
+  <button class="tab" data-view="maintenance">Maintenance</button>
+  <button class="tab" data-view="schema">Schema</button>
+  <button class="tab" data-view="storage">Storage & Logs</button>
+</nav>
+
+<main id="main">
+  <!-- OVERVIEW -->
+  <section class="view" id="view-overview">
+    <div class="tiles" id="overview-tiles"></div>
+    <div class="grid-2">
+      <div class="card">
+        <h2>Database</h2>
+        <div id="overview-db" class="kv"></div>
+      </div>
+      <div class="card">
+        <h2>Health</h2>
+        <div id="overview-health" class="kv"></div>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <h2>Sessions created per day</h2>
+        <canvas id="overview-chart" height="170"></canvas>
+        <p class="muted small" id="overview-chart-note"></p>
+      </div>
+      <div class="card">
+        <h2>Message types</h2>
+        <div id="overview-msgs"></div>
+      </div>
+    </div>
+    <div class="grid-3">
+      <div class="card"><h2>Top models</h2><div id="overview-models"></div></div>
+      <div class="card"><h2>Top agents</h2><div id="overview-agents"></div></div>
+      <div class="card"><h2>Top directories</h2><div id="overview-dirs"></div></div>
+    </div>
+    <div class="card">
+      <h2>Table row counts</h2>
+      <div id="overview-tables" class="table-wrap"></div>
+    </div>
+  </section>
+
+  <!-- SESSIONS -->
+  <section class="view hidden" id="view-sessions">
+    <div class="filterbar">
+      <input id="f-search" class="input grow" type="search" placeholder="Search title, id or slug…">
+      <select id="f-project" class="input"><option value="">All projects</option></select>
+      <select id="f-directory" class="input"><option value="">All directories</option></select>
+      <select id="f-agent" class="input"><option value="">All agents</option></select>
+      <select id="f-model" class="input"><option value="">All models</option></select>
+      <select id="f-state" class="input"><option value="">Any state</option></select>
+      <select id="f-kind" class="input"><option value="">Any kind</option></select>
+      <input id="f-from" class="input date" type="date" title="Created from">
+      <input id="f-to" class="input date" type="date" title="Created to">
+      <span id="filter-badge" class="badge hidden">0</span>
+      <button id="filter-reset" class="btn btn-ghost">Reset</button>
+    </div>
+    <div class="toolbar">
+      <div class="chips" id="sort-chips">
+        <button class="chip" data-sort="time_updated">Updated</button>
+        <button class="chip" data-sort="time_created">Created</button>
+        <button class="chip" data-sort="title">Title</button>
+        <button class="chip" data-sort="messages">Messages</button>
+        <button class="chip" data-sort="cost">Cost</button>
+        <button class="chip" data-sort="directory">Directory</button>
+        <button class="chip" data-sort="agent">Agent</button>
+      </div>
+      <div class="spacer"></div>
+      <div class="segmented" id="view-toggle">
+        <button data-mode="table" class="active">Table</button>
+        <button data-mode="grid">Grid</button>
+        <button data-mode="compact">Compact</button>
+      </div>
+      <button id="export-csv" class="btn">⤓ CSV</button>
+      <button id="export-json" class="btn">⤓ JSON</button>
+    </div>
+    <div id="session-stats" class="statline"></div>
+    <div id="session-bulkbar" class="bulkbar hidden">
+      <span class="bulk-count" id="session-selection-count">0 selected</span>
+      <button class="btn" data-bulk="select-all">Select all matching</button>
+      <button class="btn" data-bulk="export-bundle">Export bundles</button>
+      <button class="btn" data-bulk="export-markdown">Export Markdown</button>
+      <button class="btn" data-bulk="move">Move to…</button>
+      <button class="btn btn-danger" data-bulk="delete">Delete selected</button>
+      <button class="btn btn-ghost" data-bulk="clear">Clear</button>
+    </div>
+    <div id="sessions-table" class="table-wrap"></div>
+    <div id="sessions-result" class="result"></div>
+    <div class="pager" id="sessions-pager"></div>
+  </section>
+
+  <!-- PROJECTS -->
+  <section class="view hidden" id="view-projects">
+    <div class="toolbar">
+      <input id="p-search" class="input grow" type="search" placeholder="Search projects…">
+      <button id="export-projects-csv" class="btn">⤓ CSV</button>
+    </div>
+    <div id="project-bulkbar" class="bulkbar hidden">
+      <span class="bulk-count" id="project-selection-count">0 selected</span>
+      <button class="btn" data-bulk="select-all">Select all matching</button>
+      <button class="btn" data-bulk="move">Move their sessions to…</button>
+      <button class="btn btn-danger" data-bulk="delete">Delete selected</button>
+      <button class="btn btn-ghost" data-bulk="clear">Clear</button>
+    </div>
+    <div id="projects-table" class="table-wrap"></div>
+    <div id="projects-result" class="result"></div>
+  </section>
+
+  <!-- DIRECTORIES -->
+  <section class="view hidden" id="view-directories">
+    <div id="directories-summary" class="statline"></div>
+    <div id="directories-table" class="table-wrap"></div>
+  </section>
+
+  <!-- BACKUPS -->
+  <section class="view hidden" id="view-backups">
+    <div class="toolbar">
+      <button id="backup-create" class="btn btn-primary">＋ Create backup</button>
+      <input id="backup-label" class="input" placeholder="label (optional)">
+      <label class="check"><input type="checkbox" id="backup-opencode-dir"> write into the OpenCode data dir</label>
+      <div class="spacer"></div>
+      <span class="muted small" id="backup-dir"></span>
+    </div>
+    <div id="backups-table" class="table-wrap"></div>
+    <div class="card">
+      <h2>Backup verification</h2>
+      <p class="muted small">Pick a backup and run quick_check + foreign_key_check on it.</p>
+      <div id="backup-status"></div>
+    </div>
+  </section>
+
+  <!-- MAINTENANCE -->
+  <section class="view hidden" id="view-maintenance">
+    <div class="grid-2">
+      <div class="card">
+        <h2>Backup</h2>
+        <p class="muted small">Online backup through SQLite's backup API. The service keeps running.</p>
+        <div class="row">
+          <input id="m-backup-label" class="input grow" placeholder="label">
+          <button class="btn btn-primary" data-op="backup">Run backup</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Integrity</h2>
+        <p class="muted small">quick_check + foreign_key_check on the live database.</p>
+        <div class="row">
+          <button class="btn" data-op="verify">Verify database</button>
+        </div>
+        <div id="m-verify-result" class="result"></div>
+      </div>
+      <div class="card">
+        <h2>Checkpoint / Vacuum</h2>
+        <p class="muted small">Fold the WAL into the main file, then rewrite the database to reclaim free pages.</p>
+        <div class="row">
+          <button class="btn" data-op="checkpoint">Checkpoint</button>
+          <button class="btn" data-op="vacuum">Vacuum</button>
+          <label class="check"><input type="checkbox" id="m-vacuum-secure" checked> secure_delete</label>
+        </div>
+        <div id="m-shrink-result" class="result"></div>
+      </div>
+      <div class="card">
+        <h2>Repair event sequences</h2>
+        <p class="muted small">Align <code>event_sequence.seq</code> with <code>MAX(session_message.seq)</code>. Sessions restored by direct SQL cannot send prompts until this is fixed.</p>
+        <div class="row">
+          <button class="btn" data-op="repair-sequences">Repair counters</button>
+          <button class="btn" data-op="prune-event-sequences">Prune orphan counters</button>
+        </div>
+        <div id="m-repair-result" class="result"></div>
+      </div>
+      <div class="card">
+        <h2>Prune projects</h2>
+        <p class="muted small">There is no project-delete API, so the registry is pruned with direct SQL in one transaction.</p>
+        <div class="row">
+          <input id="m-prune-keep" class="input grow" placeholder="directory or project id to keep">
+          <button class="btn" data-op="prune-projects">Prune</button>
+        </div>
+        <div id="m-prune-result" class="result"></div>
+      </div>
+      <div class="card">
+        <h2>Move sessions</h2>
+        <p class="muted small">Moves through <code>POST /api/session/{id}/move</code> so projections stay consistent.</p>
+        <div class="row">
+          <input id="m-move-target" class="input grow" placeholder="target directory">
+          <button class="btn" data-op="move-sessions">Move all</button>
+        </div>
+        <div id="m-move-result" class="result"></div>
+      </div>
+      <div class="card">
+        <h2>Export</h2>
+        <p class="muted small">Markdown export of every session, or a JSON bundle for one session that can be restored later.</p>
+        <div class="row">
+          <button class="btn" data-op="export-markdown">Export Markdown</button>
+          <input id="m-bundle-id" class="input grow" placeholder="session id for bundle">
+          <button class="btn" data-op="export-bundle">Export bundle</button>
+        </div>
+        <div id="m-export-result" class="result"></div>
+      </div>
+      <div class="card">
+        <h2>Restore bundle</h2>
+        <p class="muted small">Insert a session from a JSON bundle, advancing the event counter so prompts work.</p>
+        <div class="row">
+          <input id="m-restore-path" class="input grow" placeholder="path to bundle json">
+          <button class="btn" data-op="restore-bundle">Restore</button>
+        </div>
+        <div id="m-restore-result" class="result"></div>
+      </div>
+      <div class="card danger">
+        <h2>Delete sessions</h2>
+        <p class="muted small">Deletes through the API, then purges the legacy mirror rows. Irreversible.</p>
+        <div class="row">
+          <input id="m-delete-ids" class="input grow" placeholder="session ids, comma separated">
+          <button class="btn btn-danger" data-op="delete-sessions">Delete</button>
+        </div>
+        <div id="m-delete-result" class="result"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Audit log</h2>
+      <div id="audit-table" class="table-wrap"></div>
+    </div>
+  </section>
+
+  <!-- SCHEMA -->
+  <section class="view hidden" id="view-schema">
+    <div class="grid-2">
+      <div class="card">
+        <h2>Tables</h2>
+        <div id="schema-tables" class="table-wrap"></div>
+      </div>
+      <div class="card">
+        <h2>Rows</h2>
+        <div class="row">
+          <select id="schema-table-select" class="input grow"></select>
+          <input id="schema-where" class="input grow" placeholder="WHERE clause (optional)">
+          <button id="schema-load" class="btn">Load</button>
+        </div>
+        <div id="schema-rows" class="table-wrap"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>SQL console <span class="muted small">(read-only)</span></h2>
+      <textarea id="sql-input" class="textarea" rows="4"
+        placeholder="SELECT directory, COUNT(*) FROM session_v2 GROUP BY directory"></textarea>
+      <div class="row">
+        <button id="sql-run" class="btn btn-primary">Run</button>
+        <span class="muted small">SELECT / WITH / PRAGMA only</span>
+      </div>
+      <div id="sql-result" class="table-wrap"></div>
+    </div>
+  </section>
+
+  <!-- STORAGE -->
+  <section class="view hidden" id="view-storage">
+    <div class="grid-2">
+      <div class="card">
+        <h2>Storage</h2>
+        <div id="storage-table" class="table-wrap"></div>
+      </div>
+      <div class="card">
+        <h2>Log files</h2>
+        <div id="log-table" class="table-wrap"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Log tail</h2>
+      <div id="log-tail" class="logtail"></div>
+    </div>
+  </section>
+</main>
+
+<!-- SESSION DRAWER -->
+<div id="drawer" class="drawer hidden">
+  <div class="drawer-panel">
+    <div class="drawer-head">
+      <div>
+        <h2 id="drawer-title">Session</h2>
+        <p id="drawer-sub" class="muted small"></p>
+      </div>
+      <button id="drawer-close" class="btn btn-ghost">✕</button>
+    </div>
+    <div id="drawer-meta" class="kv"></div>
+    <div class="row">
+      <input id="msg-search" class="input grow" type="search" placeholder="Search messages…">
+      <select id="msg-type" class="input"><option value="">All types</option></select>
+      <button id="bundle-export" class="btn">Export bundle</button>
+    </div>
+    <div id="drawer-messages" class="messages"></div>
+    <div class="pager" id="drawer-pager"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

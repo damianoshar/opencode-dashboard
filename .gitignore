@@ -1,0 +1,10 @@
+# runtime artefacts
+data/
+opencode-dashboard-data/
+server.log
+*.log
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
