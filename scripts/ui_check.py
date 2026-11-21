@@ -1,10 +1,12 @@
-"""Browser check of the bulk selection UI (Playwright).
+"""Browser check of the dashboard: page routing and bulk selection.
 
     python scripts/ui_check.py                       # against 127.0.0.1:8791
     python scripts/ui_check.py --url http://... --out C:/temp/shots
 
-The script only reads the dashboard: it selects rows, checks the bulk bar and
-takes screenshots. It never clicks a destructive button.
+The script drives the dashboard in a browser: it checks the routes, the
+selection UI and the delete flow. The only destructive action is the deletion
+of **one empty project** (a project without sessions) - that is what the
+feature is for, and it removes a stale registry row.
 """
 
 from __future__ import annotations
@@ -18,6 +20,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default="http://127.0.0.1:8791")
     parser.add_argument("--out", default=str(Path.home() / "AppData/Local/Temp/opencode"))
+    parser.add_argument("--skip-delete", action="store_true",
+                        help="do not run the project delete check")
     args = parser.parse_args()
 
     try:
@@ -36,13 +40,65 @@ def main() -> int:
         if not condition:
             failures.append(message)
 
+    base = args.url.rstrip("/")
+
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1500, "height": 950})
-        page.goto(args.url, timeout=30000)
-        page.wait_for_selector(".view", timeout=15000)
+        dialogs: list[str] = []
 
-        # --- sessions -----------------------------------------------------
+        def on_dialog(dialog):
+            """Accept the first dialog, refuse everything after it.
+
+            The second prompt of the project delete asks for the word DELETE
+            before it destroys the sessions of a project. This script must never
+            type it: a stray accept would wipe real sessions.
+            """
+            dialogs.append(dialog.message)
+            if len(dialogs) == 1:
+                dialog.accept()
+            else:
+                dialog.dismiss()
+
+        page.on("dialog", on_dialog)
+        page.goto(base + "/", timeout=30000)
+        page.wait_for_selector("#view-overview:not(.hidden)", timeout=15000)
+
+        # --- routing --------------------------------------------------------
+        check(page.url.replace(base, "") == "/", "root route is /")
+
+        page.click('.tab[data-view="sessions"]')
+        page.wait_for_selector("#sessions-table table", timeout=15000)
+        check(page.url.replace(base, "") == "/sessions", "tab click routes to /sessions")
+
+        page.fill("#f-search", "CV")
+        page.wait_for_timeout(900)
+        check("search=CV" in page.url, "the filter ends up in the query string")
+
+        rows = page.query_selector_all("#sessions-table tbody tr")
+        if rows:
+            rows[0].click()
+            page.wait_for_timeout(1200)
+            check("/sessions/" in page.url, "a session row routes to /sessions/<id>")
+            check(page.is_visible("#drawer"), "the drawer opens on a deep link")
+            page.click("#drawer-close")
+            page.wait_for_timeout(400)
+            check("/sessions/" not in page.url, "closing the drawer returns to /sessions")
+
+        page.go_back()
+        page.wait_for_timeout(600)
+        check(page.is_visible("#sessions-table"), "the back button keeps the app alive")
+
+        page.goto(base + "/projects?search=jobsearch", timeout=30000)
+        page.wait_for_selector("#projects-table table", timeout=15000)
+        check(page.input_value("#p-search") == "jobsearch",
+              "the project search is restored from the URL")
+
+        page.goto(base + "/nonsense", timeout=30000)
+        page.wait_for_timeout(700)
+        check(page.is_visible("#view-overview"), "an unknown route falls back to overview")
+
+        # --- selection ------------------------------------------------------
         page.click('.tab[data-view="sessions"]')
         page.wait_for_selector("#sessions-table table", timeout=15000)
         boxes = page.query_selector_all("#sessions-table .sel-box")
@@ -75,7 +131,7 @@ def main() -> int:
         page.click('[data-mode="table"]')
         page.wait_for_timeout(300)
 
-        # --- projects -----------------------------------------------------
+        # --- projects -------------------------------------------------------
         page.click('.tab[data-view="projects"]')
         page.wait_for_selector("#projects-table table", timeout=15000)
         pboxes = page.query_selector_all("#projects-table .project-sel")
@@ -87,6 +143,39 @@ def main() -> int:
         check("1 selected" in count, "project bulk bar reports the selection (%r)" % count)
         page.screenshot(path=str(out / "ui-projects-selection.png"))
 
+        # --- delete an empty project ----------------------------------------
+        if not args.skip_delete:
+            # drop the selection of the check above: it points at the first
+            # row, which is the project that owns the sessions
+            if page.is_visible('#project-bulkbar [data-bulk="clear"]'):
+                page.click('#project-bulkbar [data-bulk="clear"]')
+                page.wait_for_timeout(600)
+
+            empty = None
+            for row in page.query_selector_all("#projects-table tbody tr"):
+                cells = row.query_selector_all("td")
+                if len(cells) > 3 and cells[3].inner_text().strip() == "0":
+                    empty = row
+                    break
+            if empty is None:
+                print("%-58s skipped" % "delete an empty project (no empty project left)")
+            else:
+                project_id = empty.query_selector(".project-sel").get_attribute("data-id")
+                empty.query_selector(".project-sel").check()
+                page.wait_for_timeout(200)
+                dialogs.clear()
+                page.click('#project-bulkbar [data-bulk="delete"]')
+                page.wait_for_timeout(2500)
+                check(bool(dialogs), "the delete asks for a confirmation")
+                check(len(dialogs) == 1,
+                      "an empty project is deleted without a cascade prompt (%d dialogs)"
+                      % len(dialogs))
+                result = page.inner_text("#projects-result")
+                check('"ok": true' in result, "the empty project was deleted (%s)"
+                      % result.replace("\n", " ")[:160])
+                check(page.query_selector('[data-id="%s"]' % project_id) is None,
+                      "the deleted project is gone from the table")
+                page.screenshot(path=str(out / "ui-project-delete.png"))
         browser.close()
 
     print("\nscreenshots in %s" % out)

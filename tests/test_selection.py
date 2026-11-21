@@ -80,6 +80,21 @@ def test_resolve_session_ids_by_filter(maintenance):
     assert maintenance.resolve_session_ids(None) == []
 
 
+def test_resolve_session_ids_without_filters_means_every_session(maintenance):
+    """"Select all matching" with no active filter has to resolve every session."""
+    ids = maintenance.resolve_session_ids({})
+    assert sorted(ids) == ["s1", "s2"]
+    assert maintenance.resolve_session_ids(None) == []
+
+
+def test_resolve_project_ids_without_search_means_every_project(maintenance):
+    """The project search box is the only filter: an empty search matches all."""
+    ids = maintenance.resolve_project_ids({"search": ""})
+    assert sorted(ids) == ["p1", "p2", "p3"]
+    assert maintenance.resolve_project_ids({"search": "two"}) == ["p2"]
+    assert maintenance.resolve_project_ids(None) == []
+
+
 def test_delete_sessions_resolves_filters(maintenance):
     ids = maintenance.resolve_session_ids({"search": "one"})
     assert ids == ["s1"]

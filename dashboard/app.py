@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -35,6 +35,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         @app.get("/", include_in_schema=False)
         def index() -> FileResponse:
+            return FileResponse(str(STATIC_DIR / "index.html"))
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        def spa(full_path: str) -> FileResponse:
+            """Serve the single page app for every client-side route.
+
+            The dashboard routes in the browser: /sessions, /projects,
+            /maintenance, /sessions/<id>, ... A deep link or a page reload has
+            to end up in the same place as a click on the tab, so anything that
+            is not an API call answers with the app shell.
+            """
+            if full_path.startswith("api/") or full_path == "api":
+                raise HTTPException(404, "unknown API route")
             return FileResponse(str(STATIC_DIR / "index.html"))
 
     return app

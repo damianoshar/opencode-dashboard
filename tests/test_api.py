@@ -143,6 +143,20 @@ def test_static_index(client):
     assert "OpenCode Dashboard" in response.text
 
 
+def test_client_routes_serve_the_app_shell(client):
+    """Every client-side route has to answer with the app, not with a 404."""
+    for path in ("/sessions", "/projects", "/directories", "/backups", "/maintenance",
+                 "/schema", "/storage", "/sessions/ses_does_not_exist", "/nonsense"):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert "OpenCode Dashboard" in response.text
+
+
+def test_unknown_api_route_is_a_404(client):
+    response = client.get("/api/does-not-exist")
+    assert response.status_code == 404
+
+
 def test_static_assets_expose_the_selection_ui(client):
     """The bulk bars and the checkbox markup must be served to the browser."""
     index = client.get("/").text

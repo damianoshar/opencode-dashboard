@@ -22,6 +22,7 @@ const state = {
   projectSelection: new Set(),
   projectSelectAllMatching: false,
   projectMatchingTotal: 0,
+  lastError: "",
 };
 
 /* ------------------------------------------------------------------ utils */
@@ -113,6 +114,122 @@ function queryString(params) {
   return out ? `?${out}` : "";
 }
 
+/* ----------------------------------------------------------------- routing */
+const ROUTES = {
+  overview: "/",
+  sessions: "/sessions",
+  projects: "/projects",
+  directories: "/directories",
+  backups: "/backups",
+  maintenance: "/maintenance",
+  schema: "/schema",
+  storage: "/storage",
+};
+const VIEW_BY_PATH = Object.fromEntries(
+  Object.entries(ROUTES).map(([view, path]) => [path, view]));
+
+function routePath() {
+  return window.location.pathname.replace(/\/+$/, "") || "/";
+}
+
+function parseRoute() {
+  const parts = routePath().split("/").filter(Boolean);
+  const view = parts.length ? VIEW_BY_PATH[`/${parts[0]}`] : "overview";
+  if (!view) return { view: "overview", params: {} };
+  const params = {};
+  if (view === "sessions" && parts[1]) params.session_id = decodeURIComponent(parts[1]);
+  return { view, params };
+}
+
+function buildUrl(view, params = {}, query = "") {
+  const base = ROUTES[view] || "/";
+  const path = params.session_id
+    ? `${base}/${encodeURIComponent(params.session_id)}` : base;
+  return path + (query ? `?${query}` : "");
+}
+
+function navigate(view, options = {}) {
+  const { params = {}, query = "", replace = false } = options;
+  const url = buildUrl(view, params, query);
+  const entry = { view, ...params };
+  if (replace) window.history.replaceState(entry, "", url);
+  else window.history.pushState(entry, "", url);
+}
+
+function dateToInput(ms) {
+  if (!ms) return "";
+  const date = new Date(Number(ms));
+  if (isNaN(date.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function inputToDate(value) {
+  if (!value) return "";
+  const date = new Date(`${value}T00:00:00`);
+  return isNaN(date.getTime()) ? "" : date.getTime();
+}
+
+function sessionQueryString() {
+  const params = new URLSearchParams();
+  Object.entries(state.filters).forEach(([key, value]) => {
+    if (value === "" || value === null || value === undefined) return;
+    if (key === "created_from" || key === "created_to") {
+      params.set(key, dateToInput(value));
+    } else {
+      params.set(key, value);
+    }
+  });
+  return params.toString();
+}
+
+function projectQueryString() {
+  const search = ($("#p-search") && $("#p-search").value.trim()) || "";
+  return search ? `search=${encodeURIComponent(search)}` : "";
+}
+
+/** Put the current filters of the active view into the URL. */
+function syncUrl() {
+  const route = parseRoute();
+  const query = route.view === "projects" ? projectQueryString() : sessionQueryString();
+  navigate(route.view, { params: route.params, query, replace: true });
+}
+
+/** Read the filters of the URL into the form and into the state. */
+function applyQueryToForm() {
+  const params = new URLSearchParams(window.location.search);
+  const view = parseRoute().view;
+
+  if (view === "projects") {
+    const search = $("#p-search");
+    if (search) search.value = params.get("search") || "";
+    return;
+  }
+  if (view !== "sessions") return;
+
+  Object.keys(state.filters).forEach((key) => { state.filters[key] = ""; });
+  ["#f-search", "#f-from", "#f-to"].forEach((sel) => { $(sel).value = ""; });
+  ["#f-project", "#f-directory", "#f-agent", "#f-model", "#f-state", "#f-kind"]
+    .forEach((sel) => { $(sel).value = ""; });
+
+  ["search", "project_id", "directory", "agent", "model", "state", "kind"]
+    .forEach((key) => {
+      const value = params.get(key);
+      if (!value) return;
+      state.filters[key] = value;
+      const input = $(`#f-${key}`);
+      if (input) input.value = value;
+    });
+  ["created_from", "created_to"].forEach((key) => {
+    const value = params.get(key);
+    if (!value) return;
+    const ms = inputToDate(value);
+    state.filters[key] = ms;
+    const input = $(key === "created_from" ? "#f-from" : "#f-to");
+    if (input) input.value = value;
+  });
+}
+
 /* ------------------------------------------------------------------- boot */
 async function boot() {
   bindTabs();
@@ -121,7 +238,14 @@ async function boot() {
   bindBulkActions();
   await refreshHealth();
   await loadFacets();
-  await renderView();
+  applyQueryToForm();
+  const route = parseRoute();
+  switchView(route.view, { params: route.params, push: false, replace: true });
+  window.addEventListener("popstate", () => {
+    const next = parseRoute();
+    applyQueryToForm();
+    switchView(next.view, { params: next.params, push: false });
+  });
 }
 
 function bindTabs() {
@@ -130,22 +254,37 @@ function bindTabs() {
   });
 }
 
-function switchView(name) {
+function switchView(name, options = {}) {
+  const { params = {}, push = true, replace = false } = options;
+  if (!ROUTES[name]) name = "overview";
   $$("#tabs .tab").forEach((t) => t.classList.toggle("active", t.dataset.view === name));
   state.view = name;
   $$(".view").forEach((v) => v.classList.add("hidden"));
-  $(`#view-${name}`).classList.remove("hidden");
+  const view = $(`#view-${name}`);
+  if (view) view.classList.remove("hidden");
+  document.title = `OpenCode Dashboard · ${name}`;
+  const query = name === "projects" ? projectQueryString() : sessionQueryString();
+  if (push) navigate(name, { params, query, replace });
+  else if (replace) navigate(name, { params, query, replace: true });
   renderView();
+  if (params.session_id) openSession(params.session_id, { updateUrl: false });
 }
 
 function bindGlobalButtons() {
   $("#refresh-btn").addEventListener("click", () => renderView());
-  $("#drawer-close").addEventListener("click", () => $("#drawer").classList.add("hidden"));
+  const closeDrawer = () => {
+    $("#drawer").classList.add("hidden");
+    // the deep link of the open session is replaced by the list itself
+    if (parseRoute().params.session_id) {
+      navigate("sessions", { query: sessionQueryString(), replace: true });
+    }
+  };
+  $("#drawer-close").addEventListener("click", closeDrawer);
   $("#drawer").addEventListener("click", (e) => {
-    if (e.target === $("#drawer")) $("#drawer").classList.add("hidden");
+    if (e.target === $("#drawer")) closeDrawer();
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") $("#drawer").classList.add("hidden");
+    if (e.key === "Escape") closeDrawer();
   });
 }
 
@@ -317,6 +456,7 @@ function bindSessions() {
 
   const apply = () => {
     state.page = 1;
+    syncUrl();
     renderSessions();
   };
   $("#f-search").addEventListener("input", debounce(() => {
@@ -345,6 +485,7 @@ function bindSessions() {
     ["#f-project", "#f-directory", "#f-agent", "#f-model", "#f-state", "#f-kind"]
       .forEach((sel) => { $(sel).value = ""; });
     state.page = 1;
+    syncUrl();
     renderSessions();
   });
 
@@ -468,7 +609,7 @@ async function renderSessions() {
       `$${(s.cost || 0).toFixed(2)}`,
       esc(fmtDate(s.time_created)),
       esc(fmtDate(s.time_updated)),
-    ]), true);
+    ]), true, list.items.map((s) => s.id));
   }
 
   $$("[data-id]", container).forEach((row) => {
@@ -668,10 +809,10 @@ async function handleProjectBulk(action) {
     return;
   }
   if (action === "delete") {
-    const first = !window.confirm(
+    const confirmed = window.confirm(
       `Delete ${count} selected project(s)?\n\n` +
       "Projects that still own sessions will be refused unless you confirm the second step.");
-    if (!first) return;
+    if (!confirmed) return;
     const result = await runMaintenance("delete-projects", payload, "#projects-result");
     if (result && result.ok) {
       state.projectSelection.clear();
@@ -679,11 +820,13 @@ async function handleProjectBulk(action) {
       renderProjects();
       return;
     }
-    const cascade = window.confirm(
-      "Some selected projects still own sessions.\n\n" +
-      "Deleting a project CASCADES and permanently destroys every session that belongs to it.\n\n" +
-      "Destroy those sessions as well?");
-    if (!cascade) return;
+    // The server refused because the selection still owns sessions. Destroying
+    // them is irreversible, so the user has to type the word.
+    const answer = window.prompt(
+      "Deleting a project CASCADES: every session that belongs to it is destroyed.\n\n" +
+      (state.lastError ? state.lastError + "\n\n" : "") +
+      "Type DELETE to destroy those sessions as well, anything else cancels.");
+    if (!answer || answer.trim().toUpperCase() !== "DELETE") return;
     const forced = await runMaintenance("delete-projects",
       { ...payload, delete_sessions: true }, "#projects-result");
     if (forced && forced.ok) {
@@ -695,9 +838,13 @@ async function handleProjectBulk(action) {
 }
 
 /* ---------------------------------------------------------------- drawer */
-async function openSession(sessionId) {
+async function openSession(sessionId, options = {}) {
+  const { updateUrl = true } = options;
   $("#drawer").classList.remove("hidden");
   state.msgOffset = 0;
+  if (updateUrl) {
+    navigate("sessions", { params: { session_id: sessionId }, query: sessionQueryString() });
+  }
   try {
     const detail = await api(`/api/sessions/${sessionId}`);
     state.session = detail;
@@ -833,7 +980,10 @@ async function renderProjects() {
   });
   if (!$("#p-search").dataset.bound) {
     $("#p-search").dataset.bound = "1";
-    $("#p-search").addEventListener("input", debounce(renderProjects, 300));
+    $("#p-search").addEventListener("input", debounce(() => {
+      syncUrl();
+      renderProjects();
+    }, 300));
     $("#export-projects-csv").addEventListener("click", () => {
       window.location.href = `/api/export/projects.csv${queryString({ search })}`;
     });
@@ -951,6 +1101,7 @@ function maintenancePayload(operation) {
 
 async function runMaintenance(operation, payload, targetSelector) {
   const body = { ...payload, confirm: true };
+  state.lastError = "";
   try {
     const result = await api(`/api/maintenance/${operation}`, {
       method: "POST",
@@ -963,6 +1114,7 @@ async function runMaintenance(operation, payload, targetSelector) {
     toast(`${operation}: ${result.message || "done"}`, result.ok ? "ok" : "err");
     return result;
   } catch (err) {
+    state.lastError = err.message;
     if (targetSelector) {
       $(targetSelector).className = "result err";
       $(targetSelector).textContent = err.message;
@@ -1149,10 +1301,13 @@ async function renderStorage() {
 }
 
 /* ----------------------------------------------------------------- table */
-function tableHtml(headers, rows, rawHeaders = false) {
+function tableHtml(headers, rows, rawHeaders = false, rowIds = null) {
   if (!rows.length) return `<p class="muted small" style="padding:12px">no rows</p>`;
   const head = headers.map((h) => `<th>${rawHeaders ? h : esc(h)}</th>`).join("");
-  const body = rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`).join("");
+  const body = rows.map((row, index) => {
+    const id = rowIds && rowIds[index] ? ` data-id="${esc(rowIds[index])}"` : "";
+    return `<tr${id}>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`;
+  }).join("");
   return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 

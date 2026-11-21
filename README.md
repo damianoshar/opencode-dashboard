@@ -50,6 +50,34 @@ Environment overrides:
 | **Schema** | every table with its columns, indexes and foreign keys, a row browser, and a read-only SQL console (`SELECT` / `WITH` / `PRAGMA` only) |
 | **Storage & Logs** | size and file counts for the OpenCode data dir, logs, storage, snapshots, worktrees, tool output and the dashboard's own folders, plus a log tail viewer |
 
+## Page routing
+
+Every tab has its own URL, so a page can be bookmarked, reloaded and shared,
+and the browser Back / Forward buttons work as expected:
+
+| Route | View |
+|---|---|
+| `/` | Overview |
+| `/sessions` | Sessions |
+| `/sessions/<session-id>` | Sessions with the message drawer open |
+| `/projects` | Projects |
+| `/directories` | Directories |
+| `/backups` | Backups |
+| `/maintenance` | Maintenance |
+| `/schema` | Schema |
+| `/storage` | Storage & Logs |
+
+* clicking a tab pushes the route with `history.pushState`, the Back and
+  Forward buttons are handled with `popstate`;
+* the active filters are part of the URL: `/sessions?search=CV&state=…` and
+  `/projects?search=jobsearch` - reloading the page restores the same result
+  set;
+* a deep link such as `/sessions/ses_…` opens the drawer for that session
+  directly;
+* an unknown route falls back to the Overview;
+* the server serves the app shell for every client-side path, but unknown
+  `/api/…` paths still answer `404` instead of returning HTML.
+
 ## Bulk selection and delete
 
 Both the **Sessions** and the **Projects** tab have a checkbox column:
@@ -60,6 +88,10 @@ Both the **Sessions** and the **Projects** tab have a checkbox column:
   matches - not only the rows that happen to be on the page;
 * the bulk bar shows the live count and offers **Export bundles**,
   **Export Markdown**, **Move to…**, **Delete selected** and **Clear**.
+
+The server resolves the selection itself: `filters: null` means "no
+selection", while an empty filter set (no active filter) means "everything
+that matches" - which is every row.
 
 ### Deleting sessions
 
@@ -87,8 +119,11 @@ delete_sessions=true to destroy them as well.
 ```
 
 The legacy `session` mirror counts as ownership too - it cascades into
-`message`, `todo` and `session_share`. The UI asks for a second, explicit
-confirmation before it repeats the delete with `delete_sessions: true`.
+`message`, `todo` and `session_share`. The UI therefore asks for a **typed
+confirmation**: the second step is a `window.prompt` in which the word
+`DELETE` has to be typed out. Anything else (including an empty answer or
+just `OK`) cancels the operation, so a stray click, an automation run or a
+mis-typed confirmation can never destroy real sessions by accident.
 
 Every mutating endpoint needs `{"confirm": true}` and is written to
 `data/audit.log`.
@@ -144,8 +179,9 @@ opencode-dashboard/
     app.py           FastAPI factory + static mount
     static/          index.html, app.js, styles.css
   scripts/
-    verify_live.py   read-only health report of the live database
-    ui_check.py      Playwright check of the selection UI
+    verify_live.py       read-only health report of the live database
+    ui_check.py          Playwright check of the routing and the selection UI
+    restore_sessions.py  puts sessions that went missing back into the live DB
   tests/
     conftest.py      shared fixtures (live client, scratch database)
     test_api.py      read-only API smoke tests            (marker: live)
@@ -159,7 +195,7 @@ opencode-dashboard/
 ## Tests
 
 ```powershell
-.\run-tests.ps1            # everything (38 tests)
+.\run-tests.ps1            # everything (42 tests)
 .\run-tests.ps1 -Live      # only the tests that read the live database
 .\run-tests.ps1 -Scratch   # only the tests that use a temp database
 .\run-tests.ps1 -Verbose   # full pytest output
@@ -181,8 +217,29 @@ Extra checks that live outside pytest:
 
 ```powershell
 python scripts/verify_live.py    # counts, quick_check, foreign_key_check, seq lag
-python scripts/ui_check.py       # browser check of the selection UI (Playwright)
+python scripts/ui_check.py       # browser check of routing + selection UI (Playwright)
 ```
+
+## Recovering deleted sessions
+
+`scripts/restore_sessions.py` puts sessions that went missing back into the
+live database from a dashboard backup:
+
+```powershell
+python scripts/restore_sessions.py --backup data\backups\opencode.db.backup-<stamp>-dashboard --dry-run
+python scripts/restore_sessions.py --backup data\backups\opencode.db.backup-<stamp>-dashboard --min-messages 4
+```
+
+* it only **inserts** rows that are missing - it never deletes anything;
+* a session travels with its messages, parts, instructions, inbox, legacy
+  mirror rows and events;
+* the `event_sequence` counter of every restored session is raised to
+  `MAX(session_message.seq)`, otherwise the restored session cannot send a
+  prompt (see the `event_sequence` trap above);
+* `--min-messages N` skips the empty shells and `--ids a,b,c` restores a
+  specific set;
+* sessions whose project no longer exists are skipped - `session_v2.project_id`
+  is a foreign key.
 
 ## Notes and pitfalls
 

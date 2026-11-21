@@ -396,11 +396,11 @@ class Maintenance:
         if not target_path.is_dir():
             raise OperationError("target directory does not exist: %s" % target_path)
         wanted = set(ids or [])
-        if not wanted and not filters and not all_sessions:
+        if not wanted and filters is None and not all_sessions:
             raise OperationError("move_sessions requires ids, filters or all=true")
         rows = self.db.query("SELECT id, directory FROM session_v2 ORDER BY time_created")
         selected = [r["id"] for r in rows if all_sessions or r["id"] in wanted]
-        if filters:
+        if filters is not None:
             selected = list(dict.fromkeys(selected + self.resolve_session_ids(filters)))
         if not selected:
             raise OperationError("no sessions selected")
@@ -421,8 +421,13 @@ class Maintenance:
         return result
 
     def resolve_session_ids(self, filters: dict | None) -> list[str]:
-        """Resolve session ids from a filter set (same filters as the sessions view)."""
-        if not filters:
+        """Resolve session ids from a filter set (same filters as the sessions view).
+
+        `filters=None` means "no selection"; an empty filter set means "every
+        session", which is what "select all matching" means when no filter is
+        active.
+        """
+        if filters is None:
             return []
         from .queries import SessionFilters
 
@@ -442,11 +447,15 @@ class Maintenance:
         return [r["id"] for r in rows]
 
     def resolve_project_ids(self, filters: dict | None) -> list[str]:
-        if not filters:
+        """Resolve project ids from a filter set.
+
+        `filters=None` means "no selection"; an empty search matches every
+        project, which is what "select all matching" means when the search box
+        is empty.
+        """
+        if filters is None:
             return []
         search = (filters.get("search") or "").strip()
-        if not search:
-            return []
         like = "%" + search + "%"
         rows = self.db.query(
             "SELECT id FROM project WHERE worktree LIKE ? OR id LIKE ? OR name LIKE ?",
@@ -461,7 +470,7 @@ class Maintenance:
         if not confirm:
             raise OperationError("delete_sessions requires confirm=true")
         selected = [i for i in ids if i]
-        if filters:
+        if filters is not None:
             selected = list(dict.fromkeys(selected + self.resolve_session_ids(filters)))
         if not selected:
             raise OperationError("no sessions selected")
@@ -526,7 +535,7 @@ class Maintenance:
         if not confirm:
             raise OperationError("delete_projects requires confirm=true")
         selected = [i for i in ids if i]
-        if filters:
+        if filters is not None:
             selected = list(dict.fromkeys(selected + self.resolve_project_ids(filters)))
         if not selected:
             raise OperationError("no projects selected")
@@ -657,7 +666,7 @@ class Maintenance:
         if not confirm:
             raise OperationError("export_markdown requires confirm=true")
         wanted = set(ids or [])
-        if filters:
+        if filters is not None:
             wanted |= set(self.resolve_session_ids(filters))
         if not wanted and not all_sessions:
             raise OperationError("export_markdown requires ids, filters or all=true")
