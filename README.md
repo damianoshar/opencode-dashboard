@@ -190,7 +190,7 @@ opencode-dashboard/
     restore_sessions.py  puts sessions that went missing back into the live DB
     build_docs.py        renders the GitHub Pages site
   docs/                source of the GitHub Pages site (placeholders, no URLs)
-  .github/workflows/   pages.yml publishes the site
+  .github/workflows/   pages.yml publishes the site, tests.yml runs the tests
   tests/
     conftest.py      shared fixtures (live client, scratch database)
     test_api.py      read-only API smoke tests            (marker: live)
@@ -242,6 +242,10 @@ Two kinds of tests:
 * **scratch** - they build a miniature database in a temp directory with the
   real cascade rules and drive the maintenance code directly. The OpenCode CLI
   calls are faked, so a unit test can never reach the running service.
+
+`.github/workflows/tests.yml` runs the scratch tests, checks the JavaScript
+syntax and builds the site on every push. The live tests need a real
+`opencode.db`, so they stay local.
 
 Extra checks that live outside pytest:
 
