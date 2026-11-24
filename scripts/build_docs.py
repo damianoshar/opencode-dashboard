@@ -118,6 +118,10 @@ def build(repo: str | None = None, out_dir: Path = DEFAULT_OUT) -> int:
             shutil.copy2(source, target)
         copied += 1
 
+    # tell GitHub Pages to serve the files as they are instead of running
+    # them through Jekyll
+    (out_dir / ".nojekyll").write_text("", encoding="utf-8")
+
     print("repository : %s" % values["REPO_NAME"])
     print("version    : %s" % values["VERSION"])
     print("rendered   : %d file(s) -> %s" % (copied, out_dir))
