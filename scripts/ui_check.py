@@ -104,6 +104,36 @@ def main() -> int:
         page.wait_for_timeout(700)
         check(page.is_visible("#view-overview"), "an unknown route falls back to overview")
 
+        # --- maintenance ----------------------------------------------------
+        # The maintenance buttons live in the static markup. They have to be
+        # bound when the view is shown - not only after the schema view has
+        # rendered. Open the view directly and click one of them.
+        # The integrity check is answered with a stub: a real quick_check on a
+        # multi-gigabyte database would take minutes, and the check is about
+        # the click handler, not about SQLite.
+        page.route(
+            "**/api/backups/status*",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="application/json",
+                body='{"ok": true, "quick_check": "ok", "foreign_key_violations": 0}',
+            ),
+        )
+        page.goto(base + "/maintenance", timeout=30000)
+        page.wait_for_selector("#view-maintenance:not(.hidden)", timeout=15000)
+        page.wait_for_timeout(1200)
+        ops = page.query_selector_all("#view-maintenance [data-op]")
+        check(len(ops) > 0, "the maintenance view exposes %d operation buttons" % len(ops))
+
+        page.click('#view-maintenance [data-op="verify"]')
+        page.wait_for_timeout(2500)
+        result = page.inner_text("#m-verify-result")
+        check("quick_check" in result,
+              "a maintenance button works when the view is opened directly (%s)"
+              % result.replace("\n", " ")[:120])
+        page.screenshot(path=str(out / "ui-maintenance.png"))
+        page.unroute("**/api/backups/status*")
+
         # --- selection ------------------------------------------------------
         page.click('.tab[data-view="sessions"]')
         page.wait_for_selector("#sessions-table table", timeout=15000)

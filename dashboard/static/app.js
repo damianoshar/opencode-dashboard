@@ -1071,6 +1071,9 @@ async function renderBackups() {
 /* ----------------------------------------------------------- maintenance */
 async function renderMaintenance() {
   bindDrawer();
+  // the maintenance buttons live in the static markup: they have to be bound
+  // when this view is shown, not only when the schema view happens to render
+  bindMaintenance();
   const audit = await api("/api/audit?limit=100");
   $("#audit-table").innerHTML = tableHtml(
     ["When", "Action", "OK", "Message", "Payload"],
