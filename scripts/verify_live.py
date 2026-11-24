@@ -28,7 +28,7 @@ def open_readonly(path: Path) -> sqlite3.Connection:
     return sqlite3.connect("file:%s?mode=ro" % path.as_posix(), uri=True)
 
 
-def report(con: sqlite3.Connection) -> dict:
+def report(con: sqlite3.Connection, project_dir: str | None = None) -> dict:
     out: dict = {}
     out["quick_check"] = con.execute("PRAGMA quick_check").fetchone()[0]
     out["foreign_key_violations"] = len(con.execute("PRAGMA foreign_key_check").fetchall())
@@ -63,18 +63,23 @@ def report(con: sqlite3.Connection) -> dict:
         "AND NOT EXISTS (SELECT 1 FROM session_v2 v WHERE v.id = es.aggregate_id)").fetchone()[0]
     out["other_event_sequences"] = con.execute(
         "SELECT COUNT(*) FROM event_sequence WHERE aggregate_id NOT LIKE 'ses_%'").fetchone()[0]
-    out["sessions_outside_default_project"] = [
-        {"id": row[0], "directory": row[1]}
-        for row in con.execute(
-            "SELECT id, directory FROM session_v2 WHERE directory NOT LIKE "
-            "'C:/Users/Damianos/Documents/Default Project%' LIMIT 20")
-    ]
+    # optional: list the sessions that live outside a given project directory
+    if project_dir:
+        prefix = project_dir.replace("\\", "/").rstrip("/") + "/"
+        out["sessions_outside_project_dir"] = [
+            {"id": row[0], "directory": row[1]}
+            for row in con.execute(
+                "SELECT id, directory FROM session_v2 WHERE directory NOT LIKE ? LIMIT 20",
+                (prefix + "%",))
+        ]
     return out
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--db", help="database file (default: the live OpenCode database)")
+    parser.add_argument("--project-dir",
+                        help="list the sessions that live outside this directory")
     parser.add_argument("--json", action="store_true", help="print raw JSON")
     args = parser.parse_args()
 
@@ -82,7 +87,7 @@ def main() -> int:
     path = Path(args.db) if args.db else settings.db_path
     con = open_readonly(path)
     try:
-        data = report(con)
+        data = report(con, project_dir=args.project_dir)
     finally:
         con.close()
 
@@ -109,9 +114,9 @@ def main() -> int:
             for entry in data["seq_lag_sessions"]:
                 print("  %s  max_seq=%s event_seq=%s  %s"
                       % (entry["id"], entry["max_seq"], entry["event_seq"], entry["title"]))
-        if data["sessions_outside_default_project"]:
-            print("\nsessions outside the default project:")
-            for entry in data["sessions_outside_default_project"]:
+        if data.get("sessions_outside_project_dir"):
+            print("\nsessions outside %s:" % args.project_dir)
+            for entry in data["sessions_outside_project_dir"]:
                 print("  %s  %s" % (entry["id"], entry["directory"]))
 
     return 1 if data["foreign_key_violations"] else 0

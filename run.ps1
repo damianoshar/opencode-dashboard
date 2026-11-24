@@ -19,8 +19,12 @@ $env:DASHBOARD_PORT = "$Port"
 $env:DASHBOARD_HOST = $HostAddress
 if ($ReadOnly) { $env:DASHBOARD_READ_ONLY = "1" }
 
+# ask the app where the database is, so OPENCODE_DB / OPENCODE_DATA_DIR and
+# the platform defaults are respected
+$dbPath = python -c "from dashboard.config import load_settings; print(load_settings().db_path)"
+
 Write-Host "OpenCode dashboard" -ForegroundColor Cyan
-Write-Host "  database : $env:USERPROFILE\.local\share\opencode\opencode.db"
+Write-Host "  database : $dbPath"
 Write-Host "  listening: http://${HostAddress}:${Port}" -ForegroundColor Green
 
 python -m dashboard.app

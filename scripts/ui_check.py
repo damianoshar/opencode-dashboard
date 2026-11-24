@@ -89,9 +89,15 @@ def main() -> int:
         page.wait_for_timeout(600)
         check(page.is_visible("#sessions-table"), "the back button keeps the app alive")
 
-        page.goto(base + "/projects?search=jobsearch", timeout=30000)
+        # a search term that exists in this database: take the worktree of the
+        # first project and use its last path segment
+        page.goto(base + "/projects", timeout=30000)
         page.wait_for_selector("#projects-table table", timeout=15000)
-        check(page.input_value("#p-search") == "jobsearch",
+        worktree = page.query_selector("#projects-table [data-project]").get_attribute("title")
+        search_term = (worktree or "").replace("\\", "/").rstrip("/").split("/")[-1]
+        page.goto(base + "/projects?search=" + search_term, timeout=30000)
+        page.wait_for_selector("#projects-table table", timeout=15000)
+        check(page.input_value("#p-search") == search_term,
               "the project search is restored from the URL")
 
         page.goto(base + "/nonsense", timeout=30000)

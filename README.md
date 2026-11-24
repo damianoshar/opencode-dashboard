@@ -5,14 +5,17 @@ It exposes the same data and the same maintenance operations that were used to
 recover, repair and reorganise the sessions in this environment - as a web UI
 instead of one-off scripts.
 
-```
-C:\Users\Damianos\Documents\Default Project\opencode-dashboard
+## Install
+
+```powershell
+git clone https://github.com/damianoshar/opencode-dashboard.git
+cd opencode-dashboard
+python -m pip install -r requirements.txt
 ```
 
 ## Run
 
 ```powershell
-cd "C:\Users\Damianos\Documents\Default Project\opencode-dashboard"
 .\run.ps1                 # http://127.0.0.1:8791
 .\run.ps1 -Port 9000      # different port
 .\run.ps1 -ReadOnly       # refuse every mutating endpoint
@@ -33,7 +36,10 @@ Environment overrides:
 |---|---|
 | `OPENCODE_DB` | database file (default `~/.local/share/opencode/opencode.db`) |
 | `OPENCODE_DATA_DIR` | OpenCode data dir (logs, storage, snapshots) |
+| `OPENCODE_STATE_DIR` | OpenCode state dir (default `~/.local/state/opencode`) |
+| `OPENCODE_BIN` | path to the `opencode` executable (default: found on `PATH`) |
 | `DASHBOARD_DATA_DIR` | where backups, bundles and exports are written |
+| `DASHBOARD_RECOVERY_DIR` | recovery workspaces to list as backups (default `~/opencode-recovery`) |
 | `DASHBOARD_HOST` / `DASHBOARD_PORT` | bind address |
 | `DASHBOARD_READ_ONLY` | `1` blocks all maintenance endpoints |
 
@@ -70,7 +76,7 @@ and the browser Back / Forward buttons work as expected:
 * clicking a tab pushes the route with `history.pushState`, the Back and
   Forward buttons are handled with `popstate`;
 * the active filters are part of the URL: `/sessions?search=CV&state=…` and
-  `/projects?search=jobsearch` - reloading the page restores the same result
+  `/projects?search=<name>` - reloading the page restores the same result
   set;
 * a deep link such as `/sessions/ses_…` opens the drawer for that session
   directly;
@@ -113,7 +119,7 @@ sessions, and reports what it found:
 
 ```
 1 selected project(s) still own 67 session(s) (0 legacy mirror rows):
-C:/Users/Damianos/Documents/Default Project (67 sessions).
+C:/path/to/your/project (67 sessions).
 Move the sessions to another project first, or repeat the delete with
 delete_sessions=true to destroy them as well.
 ```
@@ -182,6 +188,9 @@ opencode-dashboard/
     verify_live.py       read-only health report of the live database
     ui_check.py          Playwright check of the routing and the selection UI
     restore_sessions.py  puts sessions that went missing back into the live DB
+    build_docs.py        renders the GitHub Pages site
+  docs/                source of the GitHub Pages site (placeholders, no URLs)
+  .github/workflows/   pages.yml publishes the site
   tests/
     conftest.py      shared fixtures (live client, scratch database)
     test_api.py      read-only API smoke tests            (marker: live)
@@ -191,6 +200,27 @@ opencode-dashboard/
   run-tests.ps1      run the test suite
   data/              backups, bundles, exports, audit.log (created on first run)
 ```
+
+## The GitHub Pages site
+
+`docs/` is the source of the landing page. It contains `{{PLACEHOLDER}}`
+markers instead of absolute URLs, so no account or machine is baked into the
+repository:
+
+| Placeholder | Value |
+|---|---|
+| `{{REPO_URL}}` | `https://github.com/<owner>/<repo>` |
+| `{{REPO_NAME}}` | `<owner>/<repo>` |
+| `{{VERSION}}` | the latest git tag |
+| `{{YEAR}}` | the current year |
+
+```powershell
+python scripts/build_docs.py          # docs/ -> site/
+python scripts/build_docs.py --repo owner/name
+```
+
+`.github/workflows/pages.yml` runs the same script on every push to `main`
+and publishes `site/` through GitHub Pages.
 
 ## Tests
 
@@ -257,3 +287,7 @@ python scripts/restore_sessions.py --backup data\backups\opencode.db.backup-<sta
 - `secure_delete=ON` + `VACUUM` destroys recoverability of deleted rows.
 - The dashboard never deletes or moves anything on its own; every mutating
   endpoint needs an explicit `confirm`.
+
+## License
+
+MIT - see [LICENSE](LICENSE).

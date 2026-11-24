@@ -1,6 +1,7 @@
 # runtime artefacts
 data/
 opencode-dashboard-data/
+site/
 server.log
 *.log
 __pycache__/

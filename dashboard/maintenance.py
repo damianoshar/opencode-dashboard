@@ -181,7 +181,7 @@ class Maintenance:
             for path in sorted(self.settings.backup_dir.glob("*.json")):
                 add(path, "manifest", "dashboard backups")
 
-        recovery_root = Path.home() / "opencode-recovery"
+        recovery_root = self.settings.recovery_dir
         if recovery_root.is_dir():
             for path in sorted(recovery_root.rglob("opencode.db")):
                 add(path, "database", "recovery workspace")

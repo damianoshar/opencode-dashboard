@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenCode Dashboard</title>
+<meta name="description" content="A local web dashboard for the OpenCode SQLite database: browse sessions, projects and directories, and run maintenance operations behind an explicit confirmation.">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>◧</text></svg>">
+</head>
+<body>
+
+<header class="nav">
+  <a class="brand" href="#top">
+    <span class="logo">◧</span>
+    <span>OpenCode Dashboard</span>
+  </a>
+  <nav>
+    <a href="#features">Features</a>
+    <a href="#quickstart">Install</a>
+    <a href="#safety">Safety</a>
+    <a href="#api">API</a>
+    <a class="btn btn-ghost" href="{{REPO_URL}}" rel="noopener">GitHub</a>
+  </nav>
+</header>
+
+<main id="top">
+
+  <section class="hero">
+    <p class="eyebrow">{{REPO_NAME}} · {{VERSION}}</p>
+    <h1>See and repair your OpenCode database<br>from the browser.</h1>
+    <p class="lead">
+      A local FastAPI dashboard for <code>opencode.db</code>. It browses every
+      session, project, directory and backup, shows the health of the database
+      at a glance, and turns the maintenance chores - backup, checkpoint,
+      vacuum, move, export, delete - into explicit, audited operations.
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="#quickstart">Get started</a>
+      <a class="btn" href="{{REPO_URL}}/releases/tag/{{VERSION}}">Download {{VERSION}}</a>
+      <a class="btn btn-ghost" href="{{REPO_URL}}/blob/main/README.md">Read the README</a>
+    </div>
+    <ul class="badges">
+      <li>Python 3.10+</li>
+      <li>FastAPI</li>
+      <li>No build step</li>
+      <li>Read-only by default</li>
+      <li>MIT licensed</li>
+    </ul>
+  </section>
+
+  <section class="section" id="features">
+    <h2>Eight views, one database</h2>
+    <p class="section-lead">Every tab has its own URL, so a page can be bookmarked, reloaded and shared.</p>
+    <div class="grid">
+      <article class="card">
+        <h3>Overview</h3>
+        <p>Row counts for every table, database size, free pages, WAL stats, tokens and cost, plus the health checks that matter: orphan messages, orphan events and <em>seq-lag sessions</em>.</p>
+      </article>
+      <article class="card">
+        <h3>Sessions</h3>
+        <p>Every <code>session_v2</code> row with filters for project, directory, agent, model, state, root/child/fork, date range and free text. Table, grid and compact views, a message drawer, and CSV / JSON export.</p>
+      </article>
+      <article class="card">
+        <h3>Projects</h3>
+        <p>The project registry with worktree, VCS, session and message counts, cost and whether the directory still exists on disk. Click a directory to filter the session list.</p>
+      </article>
+      <article class="card">
+        <h3>Directories</h3>
+        <p>Every directory the app knows about, merged from <code>session_v2</code>, the legacy <code>session</code> table, <code>project</code>, <code>project_directory</code> and <code>worktree</code>, with orphan detection.</p>
+      </article>
+      <article class="card">
+        <h3>Backups</h3>
+        <p>Every backup file that can be found - OpenCode data dir, dashboard backups, recovery workspaces - with size, mtime and a one-click <code>quick_check</code> and <code>foreign_key_check</code>.</p>
+      </article>
+      <article class="card">
+        <h3>Maintenance</h3>
+        <p>Backup, verify, checkpoint, vacuum, prune projects, prune orphan counters, move sessions, export Markdown, export and restore a bundle, repair event sequences, delete sessions and projects.</p>
+      </article>
+      <article class="card">
+        <h3>Schema</h3>
+        <p>Every table with its columns, indexes and foreign keys, a row browser, and a read-only SQL console that only accepts <code>SELECT</code>, <code>WITH</code> and <code>PRAGMA</code>.</p>
+      </article>
+      <article class="card">
+        <h3>Storage & Logs</h3>
+        <p>Size and file counts for the OpenCode data dir, logs, storage, snapshots, worktrees, tool output and the dashboard's own folders, plus a log tail viewer.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="section" id="quickstart">
+    <h2>Install and run</h2>
+    <p class="section-lead">The dashboard finds the OpenCode database by itself. Point it somewhere else with an environment variable if you need to.</p>
+    <div class="code-block">
+      <div class="code-head"><span>PowerShell</span></div>
+<pre><code>git clone {{REPO_URL}}.git
+cd opencode-dashboard
+python -m pip install -r requirements.txt
+
+.\run.ps1                 # http://127.0.0.1:8791
+.\run.ps1 -Port 9000      # a different port
+.\run.ps1 -ReadOnly       # refuse every mutating endpoint</code></pre>
+    </div>
+    <div class="code-block">
+      <div class="code-head"><span>Any platform</span></div>
+<pre><code>python -m pip install -r requirements.txt
+python -m dashboard.app</code></pre>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Variable</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>OPENCODE_DB</code></td><td>database file (default <code>~/.local/share/opencode/opencode.db</code>)</td></tr>
+          <tr><td><code>OPENCODE_DATA_DIR</code></td><td>OpenCode data dir (logs, storage, snapshots)</td></tr>
+          <tr><td><code>OPENCODE_STATE_DIR</code></td><td>OpenCode state dir (default <code>~/.local/state/opencode</code>)</td></tr>
+          <tr><td><code>OPENCODE_BIN</code></td><td>path to the <code>opencode</code> executable (default: found on <code>PATH</code>)</td></tr>
+          <tr><td><code>DASHBOARD_DATA_DIR</code></td><td>where backups, bundles and exports are written</td></tr>
+          <tr><td><code>DASHBOARD_RECOVERY_DIR</code></td><td>recovery workspaces to list as backups</td></tr>
+          <tr><td><code>DASHBOARD_HOST</code> / <code>DASHBOARD_PORT</code></td><td>bind address</td></tr>
+          <tr><td><code>DASHBOARD_READ_ONLY</code></td><td><code>1</code> blocks all maintenance endpoints</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section" id="safety">
+    <h2>Nothing happens by accident</h2>
+    <p class="section-lead">A dashboard that can delete sessions has to be boring about it.</p>
+    <div class="grid grid-3">
+      <article class="card">
+        <h3>Explicit confirmation</h3>
+        <p>Every mutating endpoint refuses to run without <code>{"confirm": true}</code> in the request body, and every run is written to <code>data/audit.log</code>.</p>
+      </article>
+      <article class="card">
+        <h3>Typed cascade</h3>
+        <p>Deleting a project cascades into its sessions. The second step asks you to type <code>DELETE</code> - anything else cancels, so a stray click can never wipe a project.</p>
+      </article>
+      <article class="card">
+        <h3>Read-only default</h3>
+        <p>The database is opened read-only. The service is never stopped, and <code>-ReadOnly</code> blocks the maintenance endpoints entirely.</p>
+      </article>
+      <article class="card">
+        <h3>Backup before damage</h3>
+        <p>The backup operation is an SQLite online backup with a manifest of row counts, safe to run while OpenCode is writing.</p>
+      </article>
+      <article class="card">
+        <h3>Recoverable mistakes</h3>
+        <p><code>scripts/restore_sessions.py</code> puts sessions that went missing back into the live database from a backup and realigns their event counters.</p>
+      </article>
+      <article class="card">
+        <h3>No surprises in the API</h3>
+        <p>A session is removed through the real <code>session.remove</code> operation first. If that call fails, nothing is purged and the failure is reported.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="section" id="api">
+    <h2>The HTTP API</h2>
+    <p class="section-lead">The UI is a client of the same JSON API. Interactive documentation lives at <code>/api/docs</code>.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Endpoint</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>GET /api/health</code></td><td>database path and health</td></tr>
+          <tr><td><code>GET /api/stats</code></td><td>aggregates for the overview</td></tr>
+          <tr><td><code>GET /api/sessions</code></td><td>filtered, sorted, paginated sessions</td></tr>
+          <tr><td><code>GET /api/sessions/{id}</code></td><td>one session with its messages</td></tr>
+          <tr><td><code>GET /api/projects</code></td><td>the project registry</td></tr>
+          <tr><td><code>GET /api/directories</code></td><td>every known directory</td></tr>
+          <tr><td><code>GET /api/backups</code></td><td>every backup that can be found</td></tr>
+          <tr><td><code>GET /api/schema</code></td><td>tables, columns, indexes, foreign keys</td></tr>
+          <tr><td><code>POST /api/maintenance/{operation}</code></td><td>backup, vacuum, move, delete, export, repair…</td></tr>
+          <tr><td><code>GET /api/export/{kind}.csv</code></td><td>CSV export of the filtered set</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section" id="scripts">
+    <h2>Command line companions</h2>
+    <div class="grid grid-3">
+      <article class="card">
+        <h3><code>verify_live.py</code></h3>
+        <p>A read-only health report: <code>quick_check</code>, foreign keys, row counts, duplicate worktrees, seq-lag sessions and orphan counters.</p>
+      </article>
+      <article class="card">
+        <h3><code>ui_check.py</code></h3>
+        <p>A Playwright check of the routing, the selection UI and the delete flow. It refuses the destructive prompt by design.</p>
+      </article>
+      <article class="card">
+        <h3><code>restore_sessions.py</code></h3>
+        <p>Inserts sessions that are missing from the live database from a backup. It never deletes anything.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="cta-band">
+    <h2>Ready when you are</h2>
+    <p>Clone it, point it at your database, and look before you delete.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="{{REPO_URL}}">View on GitHub</a>
+      <a class="btn" href="{{REPO_URL}}/releases">All releases</a>
+      <a class="btn btn-ghost" href="{{REPO_URL}}/issues">Report an issue</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p>OpenCode Dashboard {{VERSION}} · released under the MIT license · <a href="{{REPO_URL}}">{{REPO_NAME}}</a></p>
+  <p class="muted">© {{YEAR}} the OpenCode Dashboard contributors</p>
+</footer>
+
+</body>
+</html>

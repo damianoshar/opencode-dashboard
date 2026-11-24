@@ -44,6 +44,7 @@ class Settings:
     project_dir: Path = field(
         default_factory=lambda: Path(__file__).resolve().parent.parent)
     data_dir: Path | None = None
+    recovery_dir: Path | None = None
     host: str = "127.0.0.1"
     port: int = 8791
     read_only: bool = False
@@ -57,6 +58,9 @@ class Settings:
         if self.data_dir is None:
             self.data_dir = self.project_dir / "data"
         self.data_dir = Path(self.data_dir)
+        if self.recovery_dir is None:
+            self.recovery_dir = _home() / "opencode-recovery"
+        self.recovery_dir = Path(self.recovery_dir)
 
     # ---- derived locations -------------------------------------------------
     @property
@@ -119,6 +123,8 @@ def load_settings() -> Settings:
         settings.db_path = Path(env("OPENCODE_DB"))
     if env("DASHBOARD_DATA_DIR"):
         settings.data_dir = Path(env("DASHBOARD_DATA_DIR"))
+    if env("DASHBOARD_RECOVERY_DIR"):
+        settings.recovery_dir = Path(env("DASHBOARD_RECOVERY_DIR"))
     if env("DASHBOARD_HOST"):
         settings.host = env("DASHBOARD_HOST")
     if env("DASHBOARD_PORT"):
