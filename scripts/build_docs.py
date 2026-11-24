@@ -75,9 +75,17 @@ def detect_repo(explicit: str | None = None) -> tuple[str, str]:
 
 
 def detect_version() -> str:
+    """The latest git tag, e.g. v0.0.1.
+
+    The tags have to be present in the checkout: a shallow clone only knows
+    the commit it was made from, so `git describe` finds nothing.
+    """
     tag = run_git("describe", "--tags", "--abbrev=0")
     if tag:
         return tag
+    tag = run_git("tag", "--list", "v*", "--sort=-v:refname")
+    if tag:
+        return tag.splitlines()[0]
     return "v0.0.0"
 
 
